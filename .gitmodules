@@ -1,0 +1,3 @@
+[submodule "waxe/xml/tests/files"]
+	path = waxe/xml/tests/files
+	url = https://github.com/waxe/test_files

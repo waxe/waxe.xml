@@ -21,6 +21,14 @@ setup(name='waxe.xml',
       install_requires=[
           # -*- Extra requirements: -*-
       ],
+      test_suite='nose.collector',
+      setup_requires=['nose'],
+      tests_require=[
+          'nose',
+          'nose-cov',
+          'WebTest',
+          'mock',
+      ],
       entry_points="""
       # -*- Entry points: -*-
       """,
