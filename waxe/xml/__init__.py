@@ -1,1 +1,1 @@
-#
+EXTENSIONS = ['.xml']
