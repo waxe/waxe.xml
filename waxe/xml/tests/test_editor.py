@@ -5,12 +5,17 @@ from pyramid import testing
 from mock import patch
 from urllib2 import HTTPError
 from lxml import etree
+import xmltool
 from waxe.core.tests.testing import WaxeTestCase, login_user, LoggedBobTestCase, SETTINGS
 
 from waxe.xml.views.editor import (
     EditorView,
     _get_tags,
 )
+
+
+def fake_render_func(login):
+    return xmltool.render.CKeditorRender()
 
 
 class TestEditorView(LoggedBobTestCase):
@@ -20,6 +25,16 @@ class TestEditorView(LoggedBobTestCase):
         super(TestEditorView, self).setUp()
         self.config.include('waxe.xml.views.editor',
                             route_prefix='/account/{login}')
+
+    def test__get_html_render(self):
+        request = testing.DummyRequest()
+        res = EditorView(request)._get_html_render()
+        self.assertEqual(res, None)
+        settings = request.registry.settings
+        func_str = '%s.fake_render_func' % fake_render_func.__module__
+        settings['waxe.xml.xmltool.render_func'] = func_str
+        res = EditorView(request)._get_html_render()
+        self.assertTrue(isinstance(res, xmltool.render.CKeditorRender))
 
     def test__get_tags(self):
         path = os.path.join(os.getcwd(), 'waxe/xml/tests/files')
@@ -500,6 +515,20 @@ class FunctionalTestEditorView(WaxeTestCase):
             'id="xmltool-form">')
         self.assertTrue(expected in dic['content'])
         self.assertTrue(isinstance(dic['jstree_data'], dict))
+
+        self.assertEqual(dic['content'].count('<textarea'), 17)
+        self.assertEqual(dic['content'].count('contenteditable="true"'), 0)
+
+        settings = self.testapp.app.app.registry.settings
+        func_str = '%s.fake_render_func' % fake_render_func.__module__
+        settings['waxe.xml.xmltool.render_func'] = func_str
+
+        res = self.testapp.get('/account/Bob/xml/edit.json',
+                               status=200,
+                               params={'path': 'file1.xml'})
+        dic = json.loads(res.body)
+        self.assertEqual(dic['content'].count('<textarea'), 17)
+        self.assertEqual(dic['content'].count('contenteditable="true"'), 17)
 
     @login_user('Bob')
     def test_edit_text(self):

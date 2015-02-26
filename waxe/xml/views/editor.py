@@ -4,6 +4,7 @@ import xmltool
 from xmltool import dtd_parser, render as xt_render
 from lxml import etree
 import json
+import importlib
 
 from urllib2 import HTTPError, URLError
 from pyramid.view import view_config
@@ -33,6 +34,15 @@ def _get_tags(dtd_url):
 
 class EditorView(BaseUserView):
 
+    def _get_html_render(self):
+        if 'waxe.xml.xmltool.render_func' not in self.request.registry.settings:
+            return None
+
+        func = self.request.registry.settings['waxe.xml.xmltool.render_func']
+        mod, func = func.rsplit('.', 1)
+        return getattr(importlib.import_module(mod), func)(
+            self.current_user.login)
+
     @view_config(route_name='edit', renderer='index.mak', permission='edit')
     @view_config(route_name='edit_json', renderer='json', permission='edit')
     def edit(self):
@@ -50,6 +60,7 @@ class EditorView(BaseUserView):
                 obj.root.html_render = xt_render.ReadonlyRender()
                 html = obj.to_html()
             else:
+                obj.root.html_render = self._get_html_render()
                 html = xmltool.generate_form_from_obj(
                     obj,
                     form_filename=filename,
@@ -176,6 +187,7 @@ class EditorView(BaseUserView):
                 return {'error_msg': str(e)}
 
         if obj:
+            obj.root.html_render = self._get_html_render()
             html = xmltool.generate_form_from_obj(
                 obj,
                 form_attrs={
@@ -275,7 +287,9 @@ class EditorView(BaseUserView):
 
         dic = xmltool.factory.get_data_from_str_id_for_html_display(
             elt_id,
-            dtd_url=dtd_url)
+            dtd_url=dtd_url,
+            html_render=self._get_html_render()
+        )
         dic['status'] = True
         return dic
 
@@ -316,7 +330,9 @@ class EditorView(BaseUserView):
             elt_id, data,
             clipboard_data, dtd_url,
             # Don't keep the attributes nor the comments
-            skip_extra=True)
+            skip_extra=True,
+            html_render=self._get_html_render()
+        )
         if not dic:
             return self._response({
                 'error_msg': 'The element can\'t be pasted here'
