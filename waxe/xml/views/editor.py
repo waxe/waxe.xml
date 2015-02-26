@@ -221,7 +221,8 @@ class EditorView(BaseUserView):
         root_path = self.root_path
         absfilename = browser.absolute_path(filename, root_path)
         try:
-            xmltool.update(absfilename, self.request.POST)
+            xmltool.update(absfilename, self.request.POST,
+                           transform=self._get_xmltool_transform())
         except (HTTPError, URLError), e:
             log.exception(e, request=self.request)
             return self._response({
@@ -248,7 +249,7 @@ class EditorView(BaseUserView):
         absfilename = browser.absolute_path(filename, root_path)
         try:
             obj = xmltool.load_string(filecontent)
-            obj.write(absfilename)
+            obj.write(absfilename, transform=self._get_xmltool_transform())
         except Exception, e:
             return {'status': False, 'error_msg': str(e)}
 
