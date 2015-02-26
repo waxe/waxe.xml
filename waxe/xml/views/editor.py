@@ -14,6 +14,11 @@ import pyramid_logging
 
 log = pyramid_logging.getLogger(__name__)
 
+import waxe.xml
+
+EXTENSIONS = waxe.xml.EXTENSIONS
+ROUTE_PREFIX = waxe.xml.ROUTE_PREFIX
+
 
 def _get_tags(dtd_url):
     dic = xmltool.dtd_parser.parse(dtd_url=dtd_url)
