@@ -14,7 +14,7 @@ from waxe.xml.views.editor import (
 )
 
 
-def fake_render_func(login):
+def fake_renderer_func(login):
     return xmltool.render.CKeditorRender()
 
 
@@ -31,8 +31,8 @@ class TestEditorView(LoggedBobTestCase):
         res = EditorView(request)._get_html_render()
         self.assertEqual(res, None)
         settings = request.registry.settings
-        func_str = '%s.fake_render_func' % fake_render_func.__module__
-        settings['waxe.xml.xmltool.render_func'] = func_str
+        func_str = '%s.fake_renderer_func' % fake_renderer_func.__module__
+        settings['waxe.xml.xmltool.renderer_func'] = func_str
         res = EditorView(request)._get_html_render()
         self.assertTrue(isinstance(res, xmltool.render.CKeditorRender))
 
@@ -151,6 +151,8 @@ class TestEditorView(LoggedBobTestCase):
         request = testing.DummyRequest(
             params={'path': 'file1.xml', 'iframe': 1})
         request.matched_route = C()
+        request.css_resources = []
+        request.js_resources = []
         request.matched_route.name = 'route'
         request.static_url = lambda *args, **kw: 'URL'
         with patch('xmltool.generate_form', return_value='My form content'):
@@ -520,8 +522,8 @@ class FunctionalTestEditorView(WaxeTestCase):
         self.assertEqual(dic['content'].count('contenteditable="true"'), 0)
 
         settings = self.testapp.app.app.registry.settings
-        func_str = '%s.fake_render_func' % fake_render_func.__module__
-        settings['waxe.xml.xmltool.render_func'] = func_str
+        func_str = '%s.fake_renderer_func' % fake_renderer_func.__module__
+        settings['waxe.xml.xmltool.renderer_func'] = func_str
 
         res = self.testapp.get('/account/Bob/xml/edit.json',
                                status=200,

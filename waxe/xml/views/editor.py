@@ -35,10 +35,10 @@ def _get_tags(dtd_url):
 class EditorView(BaseUserView):
 
     def _get_html_render(self):
-        if 'waxe.xml.xmltool.render_func' not in self.request.registry.settings:
+        if 'waxe.xml.xmltool.renderer_func' not in self.request.registry.settings:
             return None
 
-        func = self.request.registry.settings['waxe.xml.xmltool.render_func']
+        func = self.request.registry.settings['waxe.xml.xmltool.renderer_func']
         mod, func = func.rsplit('.', 1)
         return getattr(importlib.import_module(mod), func)(
             self.current_user.login)
