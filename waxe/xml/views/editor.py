@@ -364,3 +364,11 @@ def includeme(config):
     config.add_route('copy_json', '/copy.json')
     config.add_route('paste_json', '/paste.json')
     config.scan(__name__)
+
+    # We have to be sure we don't have any prefix
+    config.route_prefix = None
+    config.add_static_view(
+        'static-xml',
+        'waxe.xml:static',
+        cache_max_age=3600,
+    )
