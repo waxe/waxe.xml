@@ -34,7 +34,7 @@ def _get_tags(dtd_url):
 
 class EditorView(BaseUserView):
 
-    def _get_html_render(self):
+    def _get_html_renderer(self):
         if 'waxe.xml.xmltool.renderer_func' not in self.request.registry.settings:
             return None
 
@@ -57,10 +57,10 @@ class EditorView(BaseUserView):
         try:
             obj = xmltool.load(absfilename)
             if iframe:
-                obj.root.html_render = xt_render.ReadonlyRender()
+                obj.root.html_renderer = xt_render.ReadonlyRender()
                 html = obj.to_html()
             else:
-                obj.root.html_render = self._get_html_render()
+                obj.root.html_renderer = self._get_html_renderer()
                 html = xmltool.generate_form_from_obj(
                     obj,
                     form_filename=filename,
@@ -187,7 +187,7 @@ class EditorView(BaseUserView):
                 return {'error_msg': str(e)}
 
         if obj:
-            obj.root.html_render = self._get_html_render()
+            obj.root.html_renderer = self._get_html_renderer()
             html = xmltool.generate_form_from_obj(
                 obj,
                 form_attrs={
@@ -288,7 +288,7 @@ class EditorView(BaseUserView):
         dic = xmltool.factory.get_data_from_str_id_for_html_display(
             elt_id,
             dtd_url=dtd_url,
-            html_render=self._get_html_render()
+            html_renderer=self._get_html_renderer()
         )
         dic['status'] = True
         return dic
@@ -331,7 +331,7 @@ class EditorView(BaseUserView):
             clipboard_data, dtd_url,
             # Don't keep the attributes nor the comments
             skip_extra=True,
-            html_render=self._get_html_render()
+            html_renderer=self._get_html_renderer()
         )
         if not dic:
             return self._response({
