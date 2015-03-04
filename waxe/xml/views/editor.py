@@ -9,7 +9,7 @@ import importlib
 from urllib2 import HTTPError, URLError
 from pyramid.view import view_config
 from pyramid.renderers import render, Response
-from waxe.core import browser, utils, xml_plugins
+from waxe.core import browser, utils, xml_plugins, resource
 from waxe.core.views.base import BaseUserView, NAV_EDIT, NAV_EDIT_TEXT
 import pyramid_logging
 
@@ -372,3 +372,8 @@ def includeme(config):
         'waxe.xml:static',
         cache_max_age=3600,
     )
+
+    resource.add_js_resource('waxe.xml:static/jstree.min.js')
+    resource.add_js_resource('waxe.xml:static/xmltool.min.js')
+    resource.add_css_resource('waxe.xml:static/xmltool.min.css')
+    resource.add_css_resource('waxe.xml:static/themes/default/style.min.css')
