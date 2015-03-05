@@ -129,7 +129,7 @@ class EditorView(BaseUserView):
 
         content = utils.escape_entities(content)
 
-        html = u'<form id="xmltool-form" data-href="%s" method="POST">' % (
+        html = u'<form id="xmltool-form" class="no-tree" data-href="%s" method="POST">' % (
             self.request.custom_route_path('update_text_json'),
         )
         html += u'<input type="hidden" id="_xml_filename" name="filename" value="%s" />' % filename

@@ -26,14 +26,14 @@ class TestEditorView(LoggedBobTestCase):
         self.config.include('waxe.xml.views.editor',
                             route_prefix='/account/{login}')
 
-    def test__get_html_render(self):
+    def test__get_html_renderer(self):
         request = testing.DummyRequest()
-        res = EditorView(request)._get_html_render()
+        res = EditorView(request)._get_html_renderer()
         self.assertEqual(res, None)
         settings = request.registry.settings
         func_str = '%s.fake_renderer_func' % fake_renderer_func.__module__
         settings['waxe.xml.xmltool.renderer_func'] = func_str
-        res = EditorView(request)._get_html_render()
+        res = EditorView(request)._get_html_renderer()
         self.assertTrue(isinstance(res, xmltool.render.CKeditorRender))
 
     def test__get_tags(self):
@@ -139,7 +139,7 @@ class TestEditorView(LoggedBobTestCase):
             res = EditorView(request).edit()
             self.assertTrue(len(res), 3)
             expected = (
-                '<form id="xmltool-form" '
+                '<form id="xmltool-form" class="no-tree" '
                 'data-href="/update_text_json/filepath" method="POST">')
             self.assertTrue(expected in res['content'])
             self.assertEqual(res['error_msg'], 'Invalid XML')
@@ -176,7 +176,7 @@ class TestEditorView(LoggedBobTestCase):
         request.matched_route.name = 'route'
         request.custom_route_path = lambda *args, **kw: '/%s/filepath' % args[0]
         res = EditorView(request).edit_text()
-        expected = ('<form id="xmltool-form" '
+        expected = ('<form id="xmltool-form" class="no-tree" '
                     'data-href="/update_text_json/filepath" method="POST">')
         self.assertTrue(expected in res['content'])
         expected = '<textarea class="codemirror" name="filecontent">'
@@ -385,7 +385,8 @@ class TestEditorView(LoggedBobTestCase):
 
         dtd_url = os.path.join(path, 'exercise.dtd')
         request = testing.DummyRequest(params={'dtd_url': dtd_url,
-                                               'elt_id': 'Exercise'})
+                                               'elt_id': 'Exercise'},
+                                       xml_plugins=[])
         res = EditorView(request).add_element_json()
         self.assertTrue(res)
         self.assertTrue(isinstance(res, dict))
@@ -548,7 +549,7 @@ class FunctionalTestEditorView(WaxeTestCase):
         dic = json.loads(res.body)
         self.assertEqual(len(dic), 3)
 
-        expected = ('<form id="xmltool-form" '
+        expected = ('<form id="xmltool-form" class="no-tree" '
                     'data-href="/account/Bob/xml/update-text.json" method="POST">')
         self.assertTrue(expected in dic['content'])
         expected = '<textarea class="codemirror" name="filecontent">'
