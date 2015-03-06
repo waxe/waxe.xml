@@ -129,7 +129,7 @@ class EditorView(BaseUserView):
 
         content = utils.escape_entities(content)
 
-        html = u'<form id="xmltool-form" class="no-tree" data-href="%s" method="POST">' % (
+        html = u'<form id="xmltool-form" class="no-tree" data-action="%s" method="POST">' % (
             self.request.custom_route_path('update_text_json'),
         )
         html += u'<input type="hidden" id="_xml_filename" name="filename" value="%s" />' % filename
@@ -265,13 +265,22 @@ class EditorView(BaseUserView):
         except Exception, e:
             return {'status': False, 'error_msg': str(e)}
 
-        content = 'File updated'
+        modal = None
+        msg = 'File updated'
         if self.request.POST.get('commit'):
-            content = render('blocks/commit_modal.mak',
-                             {}, self.request)
+            modal = render('blocks/commit_modal.mak',
+                           {}, self.request)
 
         self.add_indexation_task([absfilename])
-        return {'status': True, 'content': content}
+        if modal:
+            return {
+                'modal': modal
+            }
+        return {
+            'msg': msg,
+            'breadcrumb': self._get_breadcrumb(filename),
+            'nav_editor': self._get_nav_editor(filename, kind=NAV_EDIT_TEXT)
+        }
 
     @view_config(route_name='add_element_json', renderer='json',
                  permission='edit')

@@ -140,7 +140,7 @@ class TestEditorView(LoggedBobTestCase):
             self.assertTrue(len(res), 3)
             expected = (
                 '<form id="xmltool-form" class="no-tree" '
-                'data-href="/update_text_json/filepath" method="POST">')
+                'data-action="/update_text_json/filepath" method="POST">')
             self.assertTrue(expected in res['content'])
             self.assertEqual(res['error_msg'], 'Invalid XML')
 
@@ -177,7 +177,7 @@ class TestEditorView(LoggedBobTestCase):
         request.custom_route_path = lambda *args, **kw: '/%s/filepath' % args[0]
         res = EditorView(request).edit_text()
         expected = ('<form id="xmltool-form" class="no-tree" '
-                    'data-href="/update_text_json/filepath" method="POST">')
+                    'data-action="/update_text_json/filepath" method="POST">')
         self.assertTrue(expected in res['content'])
         expected = '<textarea class="codemirror" name="filecontent">'
         self.assertTrue(expected in res['content'])
@@ -366,15 +366,14 @@ class TestEditorView(LoggedBobTestCase):
 
         with patch('xmltool.elements.Element.write', return_value=None):
             res = EditorView(request).update_text()
-            expected = {'status': True, 'content': 'File updated'}
-            self.assertEqual(res,  expected)
+            expected_msg = 'File updated'
+            self.assertEqual(res['msg'],  expected_msg)
 
             request.params['commit'] = True
             res = EditorView(request).update_text()
-            self.assertEqual(len(res), 2)
-            self.assertEqual(res['status'], True)
-            self.assertTrue('class="modal' in res['content'])
-            self.assertTrue('Commit message' in res['content'])
+            self.assertEqual(len(res), 1)
+            self.assertTrue('class="modal' in res['modal'])
+            self.assertTrue('Commit message' in res['modal'])
 
     def test_add_element_json(self):
         path = os.path.join(os.getcwd(), 'waxe/xml/tests/files')
