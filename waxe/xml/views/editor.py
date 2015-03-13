@@ -177,7 +177,7 @@ class EditorView(BaseUserView):
                                                                    dtd_url)
                 }
             obj = dic[dtd_tag]()
-            obj._xml_dtd_url = dtd_url
+            obj.dtd_url = dtd_url
         elif relpath:
             absfilename = browser.absolute_path(relpath, self.root_path)
             try:
