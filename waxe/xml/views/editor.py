@@ -9,8 +9,9 @@ import importlib
 from urllib2 import HTTPError, URLError
 from pyramid.view import view_config
 from pyramid.renderers import render, Response
+import pyramid.httpexceptions as exc
 from waxe.core import browser, utils, xml_plugins, resource
-from waxe.core.views.base import BaseUserView, NAV_EDIT, NAV_EDIT_TEXT
+from waxe.core.views.base import BaseUserView
 import pyramid_logging
 
 log = pyramid_logging.getLogger(__name__)
@@ -43,14 +44,11 @@ class EditorView(BaseUserView):
         return getattr(importlib.import_module(mod), func)(
             self.current_user.login)
 
-    @view_config(route_name='edit', renderer='index.mak', permission='edit')
-    @view_config(route_name='edit_json', renderer='json', permission='edit')
+    @view_config(route_name='edit_json')
     def edit(self):
         filename = self.request.GET.get('path')
         if not filename:
-            return self._response({
-                'error_msg': 'A filename should be provided',
-            })
+            raise exc.HTTPClientError('No filename given')
         root_path = self.root_path
         absfilename = browser.absolute_path(filename, root_path)
         iframe = 'iframe' in self.request.GET
@@ -73,49 +71,39 @@ class EditorView(BaseUserView):
                     }
                 )
             jstree_data = obj.to_jstree_dict()
-            if not self._is_json():
-                jstree_data = json.dumps(jstree_data)
         except (HTTPError, URLError), e:
             log.exception(e, request=self.request)
-            return self._response({
-                'error_msg': 'The dtd of %s can\'t be loaded.' % filename
-            })
+            raise exc.HTTPInternalServerError(
+                "The dtd of %s can't be loaded." % filename)
         except etree.XMLSyntaxError, e:
             log.exception(e, request=self.request)
             return self.edit_text(e)
         except Exception, e:
             log.exception(e, request=self.request)
-            return self._response({
-                'error_msg': str(e)
-            })
+            raise exc.HTTPInternalServerError(str(e))
 
         if 'iframe' in self.request.GET:
+            # TODO: we should remove this logic when adding a window to edit
+            # tag directly
             return Response(
                 render('iframe.mak',
-                       self._response({
+                       {
                            'content': html,
-                           'jstree_data': jstree_data,
-                       }),
+                           'jstree_data': json.dumps(jstree_data),
+                       },
                        self.request))
 
         self.add_opened_file(filename)
-        breadcrumb = self._get_breadcrumb(filename)
-        nav = self._get_nav_editor(filename, kind=NAV_EDIT)
-        return self._response({
+        return {
             'content': html,
-            'nav_editor': nav,
-            'breadcrumb': breadcrumb,
             'jstree_data': jstree_data,
-        })
+        }
 
-    @view_config(route_name='edit_text', renderer='index.mak', permission='edit')
-    @view_config(route_name='edit_text_json', renderer='json', permission='edit')
+    @view_config(route_name='edit_text_json')
     def edit_text(self, exception=None):
         filename = self.request.GET.get('path')
         if not filename:
-            return self._response({
-                'error_msg': 'A filename should be provided',
-            })
+            raise exc.HTTPClientError('No filename given')
         root_path = self.root_path
         absfilename = browser.absolute_path(filename, root_path)
         try:
@@ -123,9 +111,7 @@ class EditorView(BaseUserView):
             content = content.decode('utf-8')
         except Exception, e:
             log.exception(e, request=self.request)
-            return self._response({
-                'error_msg': str(e)
-            })
+            raise exc.HTTPInternalServerError(str(e))
 
         content = utils.escape_entities(content)
 
@@ -136,55 +122,49 @@ class EditorView(BaseUserView):
         html += u'<textarea class="codemirror" name="filecontent">%s</textarea>' % content
         html += u'</form>'
 
-        breadcrumb = self._get_breadcrumb(filename)
-        nav = self._get_nav_editor(filename, kind=NAV_EDIT_TEXT)
         dic = {
             'content': html,
-            'nav_editor': nav,
-            'breadcrumb': breadcrumb,
         }
+        # TODO: Support to display message in angular or change this logic
         if exception:
             dic['error_msg'] = str(exception)
-        return self._response(dic)
+        return dic
 
-    @view_config(route_name='get_tags_json', renderer='json', permission='edit')
+    @view_config(route_name='get_tags_json')
     def get_tags(self):
-        dtd_url = self.request.GET.get('dtd-url', None)
-
+        dtd_url = self.request.GET.get('dtd_url', None)
         if not dtd_url:
-            return {}
+            raise exc.HTTPClientError('No dtd url given')
+        return _get_tags(dtd_url)
 
-        return {'tags': _get_tags(dtd_url)}
-
-    @view_config(route_name='new_json', renderer='json', permission='edit')
+    @view_config(route_name='new_json')
     def new(self):
-        dtd_url = self.request.POST.get('dtd-url') or None
-        dtd_tag = self.request.POST.get('dtd-tag') or None
         relpath = self.request.GET.get('path')
+        dtd_url = self.request.GET.get('dtd_url')
+        dtd_tag = self.request.GET.get('dtd_tag')
 
         obj = None
         if dtd_tag and dtd_url:
+            # Create new object from the dtd url and tag
             try:
                 dic = dtd_parser.parse(dtd_url=dtd_url)
             except (HTTPError, URLError), e:
                 log.exception(e, request=self.request)
-                return {
-                    'error_msg': 'The dtd file %s can\'t be loaded.' % dtd_url
-                }
+                raise exc.HTTPInternalServerError(
+                    "The dtd file %s can't be loaded." % dtd_url)
             if dtd_tag not in dic:
-                return {
-                    'error_msg': 'Invalid dtd element: %s (%s)' % (dtd_tag,
-                                                                   dtd_url)
-                }
+                raise exc.HTTPInternalServerError(
+                    'Invalid dtd element: %s (%s)' % (dtd_tag, dtd_url))
             obj = dic[dtd_tag]()
             obj.dtd_url = dtd_url
         elif relpath:
+            # Create new object from a template
             absfilename = browser.absolute_path(relpath, self.root_path)
             try:
                 obj = xmltool.load(absfilename)
             except Exception, e:
                 log.exception(e, request=self.request)
-                return {'error_msg': str(e)}
+                raise exc.HTTPInternalServerError(str(e))
 
         if obj:
             obj.root.html_renderer = self._get_html_renderer()
@@ -199,11 +179,8 @@ class EditorView(BaseUserView):
                 }
             )
             jstree_data = obj.to_jstree_dict()
-            if not self._is_json():
-                jstree_data = json.dumps(jstree_data)
             return {
                 'content': html,
-                'breadcrumb': self._get_breadcrumb(None, force_link=True),
                 'jstree_data': jstree_data,
             }
 
@@ -213,11 +190,12 @@ class EditorView(BaseUserView):
                          self.request)
         return {'modal': content}
 
-    @view_config(route_name='update_json', renderer='json', permission='edit')
+    @view_config(route_name='update_json')
     def update(self):
-        filename = self.request.POST.pop('_xml_filename', None)
+        data = self.req_post
+        filename = data.pop('_xml_filename', None)
         if not filename:
-            return {'status': False, 'error_msg': 'No filename given'}
+            raise exc.HTTPClientError('No filename given')
 
         root, ext = os.path.splitext(filename)
         if ext != '.xml':
@@ -225,46 +203,39 @@ class EditorView(BaseUserView):
             if ext:
                 error_msg = "Bad filename extension '%s'." % ext
             error_msg += " It should be '.xml'"
-            return {
-                'status': False,
-                'error_msg': error_msg
-            }
+            raise exc.HTTPClientError(error_msg)
 
         root_path = self.root_path
         absfilename = browser.absolute_path(filename, root_path)
         try:
-            xmltool.update(absfilename, self.request.POST,
+            xmltool.update(absfilename, data,
                            transform=self._get_xmltool_transform())
         except (HTTPError, URLError), e:
             log.exception(e, request=self.request)
-            return self._response({
-                'error_msg': 'The dtd of %s can\'t be loaded.' % filename
-            })
+            raise exc.HTTPInternalServerError(
+                "The dtd of %s can't be loaded." % filename)
         except Exception, e:
             log.exception(e, request=self.request)
-            return {'status': False, 'error_msg': str(e)}
+            raise exc.HTTPInternalServerError(str(e))
 
         self.add_indexation_task([absfilename])
-        return {
-            'status': True,
-            'breadcrumb': self._get_breadcrumb(filename),
-            'nav_editor': self._get_nav_editor(filename, kind=NAV_EDIT)
-        }
+        return 'File updated'
 
-    @view_config(route_name='update_text_json', renderer='json', permission='edit')
+    @view_config(route_name='update_text_json')
     def update_text(self):
-        filecontent = self.request.POST.get('filecontent')
-        filename = self.request.POST.get('filename') or ''
+        filecontent = self.req_post.get('filecontent')
+        filename = self.req_post.get('filename') or ''
         if not filecontent or not filename:
-            return {'status': False, 'error_msg': 'Missing parameters!'}
+            raise exc.HTTPClientError('Missing parameters!')
         root_path = self.root_path
         absfilename = browser.absolute_path(filename, root_path)
         try:
             obj = xmltool.load_string(filecontent)
             obj.write(absfilename, transform=self._get_xmltool_transform())
         except Exception, e:
-            return {'status': False, 'error_msg': str(e)}
+            raise exc.HTTPInternalServerError(str(e))
 
+        # TODO: the modal logic should be in angular
         modal = None
         msg = 'File updated'
         if self.request.POST.get('commit'):
@@ -276,19 +247,15 @@ class EditorView(BaseUserView):
             return {
                 'modal': modal
             }
-        return {
-            'msg': msg,
-            'breadcrumb': self._get_breadcrumb(filename),
-            'nav_editor': self._get_nav_editor(filename, kind=NAV_EDIT_TEXT)
-        }
 
-    @view_config(route_name='add_element_json', renderer='json',
-                 permission='edit')
+        return msg
+
+    @view_config(route_name='add_element_json')
     def add_element_json(self):
         elt_id = self.request.GET.get('elt_id')
         dtd_url = self.request.GET.get('dtd_url')
         if not elt_id or not dtd_url:
-            return {'status': False, 'error_msg': 'Bad parameter'}
+            return {'error_msg': 'Bad parameter'}
 
         res = xml_plugins.add_element(self.request, elt_id, dtd_url)
         if res:
@@ -299,13 +266,12 @@ class EditorView(BaseUserView):
             dtd_url=dtd_url,
             html_renderer=self._get_html_renderer()
         )
-        dic['status'] = True
         return dic
 
-    @view_config(route_name='copy_json', renderer='json', permission='edit')
+    @view_config(route_name='copy_json')
     def copy_json(self):
         if 'elt_id' not in self.request.POST:
-            return self._response({'error_msg': 'Bad parameter'})
+            return {'error_msg': 'Bad parameter'}
         data = xmltool.factory.getElementData(self.request.POST['elt_id'],
                                               self.request.POST)
         # Write the content to paste in a temporary file
@@ -315,9 +281,9 @@ class EditorView(BaseUserView):
             'filename': filename,
             'elt_id': self.request.POST['elt_id'],
         }
-        return self._response({'info_msg': 'Copied'})
+        return {'info_msg': 'Copied'}
 
-    @view_config(route_name='paste_json', renderer='json', permission='edit')
+    @view_config(route_name='paste_json')
     def paste_json(self):
         # TODO: Validate it's the same dtd
         elt_id = self.request.POST.pop('elt_id', None)
@@ -325,13 +291,13 @@ class EditorView(BaseUserView):
         data = xmltool.utils.unflatten_params(self.request.POST)
 
         if not elt_id or not dtd_url:
-            return self._response({'error_msg': 'Bad parameter'})
+            return {'error_msg': 'Bad parameter'}
 
         clipboard = self.request.session.get('clipboard')
         if not clipboard:
-            return self._response({
+            return {
                 'error_msg': 'Empty clipboard'
-            })
+            }
         filename = clipboard['filename']
         clipboard_data = json.loads(open(filename, 'r').read())
 
@@ -343,15 +309,15 @@ class EditorView(BaseUserView):
             html_renderer=self._get_html_renderer()
         )
         if not dic:
-            return self._response({
+            return {
                 'error_msg': 'The element can\'t be pasted here'
-            })
+            }
 
-        return self._response(dic)
+        return dic
 
-    @view_config(route_name='get_comment_modal_json', renderer='json',
-                 permission='edit')
+    @view_config(route_name='get_comment_modal_json')
     def get_comment_modal_json(self):
+        # TODO: remove this function, it should be done in angular
         comment = self.request.GET.get('comment') or ''
         content = render('blocks/comment_modal.mak',
                          {'comment': comment}, self.request)
@@ -359,12 +325,8 @@ class EditorView(BaseUserView):
 
 
 def includeme(config):
-    config.add_route('edit', '/edit')
     config.add_route('edit_json', '/edit.json')
-    config.add_route('edit_text', '/edit-text')
     config.add_route('edit_text_json', '/edit-text.json')
-    config.add_route('get_tags_json', '/get-tags.json')
-    config.add_route('new', '/new')
     config.add_route('new_json', '/new.json')
     config.add_route('update_json', '/update.json')
     config.add_route('update_text_json', '/update-text.json')
@@ -372,6 +334,7 @@ def includeme(config):
     config.add_route('get_comment_modal_json', '/get-comment-modal.json')
     config.add_route('copy_json', '/copy.json')
     config.add_route('paste_json', '/paste.json')
+    config.add_route('get_tags_json', '/get-tags.json')
     config.scan(__name__)
 
     # We have to be sure we don't have any prefix
@@ -382,7 +345,8 @@ def includeme(config):
         cache_max_age=3600,
     )
 
+
     resource.add_js_resource('waxe.xml:static/jstree.min.js')
-    resource.add_js_resource('waxe.xml:static/xmltool.min.js')
+    resource.add_js_resource('waxe.xml:static/xmltool.js')
     resource.add_css_resource('waxe.xml:static/xmltool.min.css')
     resource.add_css_resource('waxe.xml:static/themes/default/style.min.css')
