@@ -12,6 +12,7 @@ from waxe.core.tests.testing import WaxeTestCase, login_user, LoggedBobTestCase,
 from waxe.xml.views.editor import (
     EditorView,
     _get_tags,
+    is_valid_filecontent,
 )
 
 
@@ -26,6 +27,14 @@ class TestEditorView(LoggedBobTestCase):
         super(TestEditorView, self).setUp()
         self.config.include('waxe.xml.views.editor',
                             route_prefix='/account/{login}')
+
+    def test_is_valid_filecontent(self):
+        try:
+            is_valid_filecontent(None, 'file.xml', 'plop')
+        except exc.HTTPInternalServerError, e:
+            self.assertTrue('Start tag' in str(e))
+
+        is_valid_filecontent(None, 'file.txt', 'plop')
 
     def test__get_html_renderer(self):
         request = testing.DummyRequest()

@@ -10,7 +10,7 @@ from urllib2 import HTTPError, URLError
 from pyramid.view import view_config
 from pyramid.renderers import render, Response
 import pyramid.httpexceptions as exc
-from waxe.core import browser, utils, xml_plugins, resource
+from waxe.core import browser, utils, xml_plugins, resource, events
 from waxe.core.views.base import BaseUserView
 import pyramid_logging
 
@@ -31,6 +31,14 @@ def _get_tags(dtd_url):
         lis += [k]
     lis.sort()
     return lis
+
+
+def is_valid_filecontent(view, path, filecontent):
+    if os.path.splitext(path)[1] == '.xml':
+        try:
+            xmltool.load_string(filecontent)
+        except Exception, e:
+            raise exc.HTTPInternalServerError(str(e))
 
 
 class EditorView(BaseUserView):
@@ -218,7 +226,9 @@ class EditorView(BaseUserView):
             log.exception(e, request=self.request)
             raise exc.HTTPInternalServerError(str(e))
 
-        self.add_indexation_task([absfilename])
+        events.trigger('updated.xml',
+                       view=self,
+                       path=filename)
         return 'File updated'
 
     @view_config(route_name='update_text_json')
@@ -242,7 +252,7 @@ class EditorView(BaseUserView):
             modal = render('blocks/commit_modal.mak',
                            {}, self.request)
 
-        self.add_indexation_task([absfilename])
+        events.trigger('updated', view=self, paths=filename)
         if modal:
             return {
                 'modal': modal
@@ -345,8 +355,10 @@ def includeme(config):
         cache_max_age=3600,
     )
 
-
     resource.add_js_resource('waxe.xml:static/jstree.min.js')
     resource.add_js_resource('waxe.xml:static/xmltool.js')
     resource.add_css_resource('waxe.xml:static/xmltool.min.css')
     resource.add_css_resource('waxe.xml:static/themes/default/style.min.css')
+
+    # When we update a file as txt, we validate it if it's an XML.
+    events.on('before_update.txt', is_valid_filecontent)
