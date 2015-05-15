@@ -10,7 +10,7 @@ from urllib2 import HTTPError, URLError
 from pyramid.view import view_config
 from pyramid.renderers import render, Response
 import pyramid.httpexceptions as exc
-from waxe.core import browser, utils, xml_plugins, resource, events
+from waxe.core import browser, utils, resource, events
 from waxe.core.views.base import BaseUserView
 import pyramid_logging
 
@@ -31,6 +31,21 @@ def _get_tags(dtd_url):
         lis += [k]
     lis.sort()
     return lis
+
+
+# Basic plugin system
+def match(request, str_id, dtd_url):
+    for plugin in request.xml_plugins:
+        if plugin.match(request, str_id, dtd_url):
+            return plugin
+
+
+def add_element(request, str_id, dtd_url):
+    plugin = match(request, str_id, dtd_url)
+    if not plugin:
+        return None
+    return plugin.add_element(request, str_id, dtd_url)
+# end Basic plugin system
 
 
 def is_valid_filecontent(view, path, filecontent):
@@ -267,7 +282,7 @@ class EditorView(BaseUserView):
         if not elt_id or not dtd_url:
             return {'error_msg': 'Bad parameter'}
 
-        res = xml_plugins.add_element(self.request, elt_id, dtd_url)
+        res = add_element(self.request, elt_id, dtd_url)
         if res:
             return res
 
@@ -334,7 +349,33 @@ class EditorView(BaseUserView):
         return {'content': content}
 
 
+def get_dtd_urls(request):
+    if 'dtd_urls' not in request.registry.settings:
+        raise AttributeError('No dtd_urls defined in the ini file.')
+    return filter(bool, request.registry.settings['dtd_urls'].split('\n'))
+
+
+def get_xml_plugins(request):
+    if 'waxe.xml.plugins' not in request.registry.settings:
+        return []
+    lis = filter(bool,
+                 request.registry.settings['waxe.xml.plugins'].split('\n'))
+
+    mods = []
+    for s in lis:
+        mods.append(importlib.import_module(s))
+    return mods
+
+
 def includeme(config):
+    settings = config.registry.settings
+    cache_timeout = settings.get('xmltool.cache_timeout')
+    if cache_timeout:
+        xmltool.cache.CACHE_TIMEOUT = cache_timeout
+
+    config.set_request_property(get_dtd_urls, 'dtd_urls', reify=True)
+    config.set_request_property(get_xml_plugins, 'xml_plugins', reify=True)
+
     config.add_route('edit_json', '/edit.json')
     config.add_route('edit_text_json', '/edit-text.json')
     config.add_route('new_json', '/new.json')
