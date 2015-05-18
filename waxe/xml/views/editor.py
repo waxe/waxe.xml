@@ -49,11 +49,17 @@ def add_element(request, str_id, dtd_url):
 
 
 def is_valid_filecontent(view, path, filecontent):
-    if os.path.splitext(path)[1] == '.xml':
-        try:
-            xmltool.load_string(filecontent)
-        except Exception, e:
-            raise exc.HTTPInternalServerError(str(e))
+    if not os.path.splitext(path)[1] == '.xml':
+        return filecontent
+
+    try:
+        xmltool.load_string(filecontent)
+        transform = view.request.xmltool_transform
+        if transform:
+            return view, path, transform(filecontent)
+        return view, path, filecontent
+    except Exception, e:
+        raise exc.HTTPInternalServerError(str(e))
 
 
 class EditorView(BaseUserView):
@@ -232,7 +238,7 @@ class EditorView(BaseUserView):
         absfilename = browser.absolute_path(filename, root_path)
         try:
             xmltool.update(absfilename, data,
-                           transform=self._get_xmltool_transform())
+                           transform=self.request.xmltool_transform)
         except (HTTPError, URLError), e:
             log.exception(e, request=self.request)
             raise exc.HTTPInternalServerError(
@@ -256,7 +262,7 @@ class EditorView(BaseUserView):
         absfilename = browser.absolute_path(filename, root_path)
         try:
             obj = xmltool.load_string(filecontent)
-            obj.write(absfilename, transform=self._get_xmltool_transform())
+            obj.write(absfilename, transform=self.request.xmltool_transform())
         except Exception, e:
             raise exc.HTTPInternalServerError(str(e))
 
@@ -367,6 +373,16 @@ def get_xml_plugins(request):
     return mods
 
 
+def get_xmltool_transform(request):
+    """Before writing XML, we can call a function to transform it.
+    """
+    if 'waxe.xml.xmltool.transform' not in request.registry.settings:
+        return None
+    func = request.registry.settings['waxe.xml.xmltool.transform']
+    mod, func = func.rsplit('.', 1)
+    return getattr(importlib.import_module(mod), func)
+
+
 def includeme(config):
     settings = config.registry.settings
     cache_timeout = settings.get('xmltool.cache_timeout')
@@ -375,6 +391,8 @@ def includeme(config):
 
     config.set_request_property(get_dtd_urls, 'dtd_urls', reify=True)
     config.set_request_property(get_xml_plugins, 'xml_plugins', reify=True)
+    config.set_request_property(get_xmltool_transform, 'xmltool_transform',
+                                reify=True)
 
     config.add_route('edit_json', '/edit.json')
     config.add_route('edit_text_json', '/edit-text.json')

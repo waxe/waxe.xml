@@ -13,11 +13,16 @@ from waxe.xml.views.editor import (
     EditorView,
     _get_tags,
     is_valid_filecontent,
+    get_xmltool_transform
 )
 
 
 def fake_renderer_func(login):
     return xmltool.render.CKeditorRender()
+
+
+def fake_get_xmltool_transform():
+    return 'Hello world'
 
 
 class TestEditorView(LoggedBobTestCase):
@@ -29,12 +34,36 @@ class TestEditorView(LoggedBobTestCase):
                             route_prefix='/account/{login}')
 
     def test_is_valid_filecontent(self):
+        request = testing.DummyRequest()
+        request.xmltool_transform = lambda s: 'Hello ' + s
+        view = EditorView(request)
         try:
-            is_valid_filecontent(None, 'file.xml', 'plop')
+            is_valid_filecontent(view, 'file.xml', 'plop')
         except exc.HTTPInternalServerError, e:
             self.assertTrue('Start tag' in str(e))
 
-        is_valid_filecontent(None, 'file.txt', 'plop')
+        res = is_valid_filecontent(view, 'file.txt', 'plop')
+        self.assertEqual(res, 'plop')
+
+        def func(filecontent):
+            return None
+
+        with patch('xmltool.load_string') as m:
+            m.side_effect = func
+            res = is_valid_filecontent(view, 'file.xml', 'plop')
+            self.assertEqual(res, (view, 'file.xml', 'Hello plop'))
+
+    def test_get_xmltool_transform(self):
+        request = testing.DummyRequest()
+        func = get_xmltool_transform(request)
+        self.assertEqual(func, None)
+
+        func_str = '%s.fake_get_xmltool_transform' % (
+            fake_get_xmltool_transform.__module__)
+        request.registry.settings['waxe.xml.xmltool.transform'] = func_str
+        func = get_xmltool_transform(request)
+        res = func()
+        self.assertEqual(res, 'Hello world')
 
     def test__get_html_renderer(self):
         request = testing.DummyRequest()
@@ -291,6 +320,7 @@ class TestEditorView(LoggedBobTestCase):
             request = testing.DummyRequest(
                 params={'_xml_filename': 'test.xml'})
             request.custom_route_path = lambda *args, **kw: '/filepath'
+            request.xmltool_transform = lambda: (lambda s: s)
             res = EditorView(request).update()
             expected = 'File updated'
             self.assertEqual(res, expected)
@@ -303,6 +333,7 @@ class TestEditorView(LoggedBobTestCase):
             request = testing.DummyRequest(
                 params={'_xml_filename': 'test.xml'})
             request.custom_route_path = lambda *args, **kw: '/filepath'
+            request.xmltool_transform = lambda: (lambda s: s)
             expected = 'My error'
             try:
                 EditorView(request).update()
@@ -346,6 +377,7 @@ class TestEditorView(LoggedBobTestCase):
             params={'filecontent': filecontent,
                     'filename': 'thefilename.xml'})
         request.custom_route_path = lambda *args, **kw: '/filepath'
+        request.xmltool_transform = lambda: (lambda s: s)
 
         with patch('xmltool.elements.Element.write', return_value=None):
             res = EditorView(request).update_text()
