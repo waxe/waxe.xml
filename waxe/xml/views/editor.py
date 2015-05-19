@@ -415,7 +415,7 @@ def includeme(config):
     )
 
     resource.add_js_resource('waxe.xml:static/jstree.min.js')
-    resource.add_js_resource('waxe.xml:static/xmltool.js')
+    resource.add_js_resource('waxe.xml:static/xmltool.min.js')
     resource.add_css_resource('waxe.xml:static/xmltool.min.css')
     resource.add_css_resource('waxe.xml:static/themes/default/style.min.css')
 
