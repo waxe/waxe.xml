@@ -414,6 +414,9 @@ def includeme(config):
         cache_max_age=3600,
     )
 
+    resource.add_js_resource('waxe.xml:static/ckeditor/ckeditor.js')
+    resource.add_js_resource('waxe.core:static/ckeditor/adapters/jquery.js')
+    resource.add_js_resource('waxe.xml:static/ckeditor-config.js')
     resource.add_js_resource('waxe.xml:static/jstree.min.js')
     resource.add_js_resource('waxe.xml:static/xmltool.min.js')
     resource.add_css_resource('waxe.xml:static/xmltool.min.css')
