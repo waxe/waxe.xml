@@ -66,7 +66,7 @@ class EditorView(BaseUserView):
 
     def _get_html_renderer(self):
         if 'waxe.xml.xmltool.renderer_func' not in self.request.registry.settings:
-            return None
+            return xt_render.ContenteditableRender()
 
         func = self.request.registry.settings['waxe.xml.xmltool.renderer_func']
         mod, func = func.rsplit('.', 1)
