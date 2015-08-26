@@ -22,15 +22,23 @@ EXTENSIONS = waxe.xml.EXTENSIONS
 ROUTE_PREFIX = waxe.xml.ROUTE_PREFIX
 
 
-def _get_tags(dtd_url):
+def _get_tags(dtd_url, text=False):
     dic = xmltool.dtd_parser.parse(dtd_url=dtd_url)
     lis = []
+    texts = []
     for k, v in dic.items():
         if issubclass(v, xmltool.elements.TextElement):
-            continue
-        lis += [k]
-    lis.sort()
-    return lis
+            texts += [k]
+        else:
+            lis += [k]
+
+    if text is True:
+        l = texts
+    else:
+        l = lis
+
+    l.sort()
+    return l
 
 
 # Basic plugin system
@@ -114,7 +122,8 @@ class EditorView(BaseUserView):
         dtd_url = self.request.GET.get('dtd_url', None)
         if not dtd_url:
             raise exc.HTTPClientError('No dtd url given')
-        return _get_tags(dtd_url)
+        text = bool(self.request.GET.get('text'))
+        return _get_tags(dtd_url, text)
 
     @view_config(route_name='new_json')
     def new(self):

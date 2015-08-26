@@ -87,6 +87,10 @@ class TestEditorView(LoggedBobTestCase):
         expected = ['Exercise', 'comments', 'mqm', 'qcm', 'test']
         self.assertEqual(res, expected)
 
+        res = _get_tags(dtd_url, text=True)
+        expected = ['choice', 'comment', 'number', 'question']
+        self.assertEqual(res, expected)
+
     def test_edit(self):
         class C(object): pass
         path = os.path.join(os.getcwd(), 'waxe/xml/tests/files')
@@ -461,6 +465,12 @@ class FunctionalTestEditorView(WaxeTestCase):
                                status=200,
                                params={'dtd_url': dtd_url})
         expected = ['Exercise', 'comments', 'mqm', 'qcm', 'test']
+        self.assertEqual(json.loads(res.body), expected)
+
+        res = self.testapp.get('/api/1/account/Bob/xml/get-tags.json',
+                               status=200,
+                               params={'dtd_url': dtd_url, 'text': True})
+        expected = ['choice', 'comment', 'number', 'question']
         self.assertEqual(json.loads(res.body), expected)
 
     @login_user('Bob')
