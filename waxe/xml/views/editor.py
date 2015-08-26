@@ -80,84 +80,34 @@ class EditorView(BaseUserView):
             raise exc.HTTPClientError('No filename given')
         root_path = self.root_path
         absfilename = browser.absolute_path(filename, root_path)
-        iframe = 'iframe' in self.request.GET
         try:
             obj = xmltool.load(absfilename)
-            if iframe:
-                obj.root.html_renderer = xt_render.ReadonlyRender()
-                html = obj.to_html()
-            else:
-                obj.root.html_renderer = self._get_html_renderer()
-                html = xmltool.generate_form_from_obj(
-                    obj,
-                    form_filename=filename,
-                    form_attrs={
-                        'data-add-href': self.request.custom_route_path('add_element_json'),
-                        'data-comment-href': self.request.custom_route_path('get_comment_modal_json'),
-                        'data-action': self.request.custom_route_path('update_json'),
-                        'data-copy-href': self.request.custom_route_path('copy_json'),
-                        'data-paste-href': self.request.custom_route_path('paste_json'),
-                    }
-                )
+            obj.root.html_renderer = self._get_html_renderer()
+            html = xmltool.generate_form_from_obj(
+                obj,
+                form_filename=filename,
+                form_attrs={
+                    'data-add-href': self.request.custom_route_path('add_element_json'),
+                    'data-comment-href': self.request.custom_route_path('get_comment_modal_json'),
+                    'data-action': self.request.custom_route_path('update_json'),
+                    'data-copy-href': self.request.custom_route_path('copy_json'),
+                    'data-paste-href': self.request.custom_route_path('paste_json'),
+                }
+            )
             jstree_data = obj.to_jstree_dict()
         except (HTTPError, URLError), e:
             log.exception(e, request=self.request)
             raise exc.HTTPInternalServerError(
                 "The dtd of %s can't be loaded." % filename)
-        except etree.XMLSyntaxError, e:
-            log.exception(e, request=self.request)
-            return self.edit_text(e)
         except Exception, e:
             log.exception(e, request=self.request)
             raise exc.HTTPInternalServerError(str(e))
-
-        if 'iframe' in self.request.GET:
-            # TODO: we should remove this logic when adding a window to edit
-            # tag directly
-            return Response(
-                render('iframe.mak',
-                       {
-                           'content': html,
-                           'jstree_data': json.dumps(jstree_data),
-                       },
-                       self.request))
 
         self.add_opened_file(filename)
         return {
             'content': html,
             'jstree_data': jstree_data,
         }
-
-    @view_config(route_name='edit_text_json')
-    def edit_text(self, exception=None):
-        filename = self.request.GET.get('path')
-        if not filename:
-            raise exc.HTTPClientError('No filename given')
-        root_path = self.root_path
-        absfilename = browser.absolute_path(filename, root_path)
-        try:
-            content = open(absfilename, 'r').read()
-            content = content.decode('utf-8')
-        except Exception, e:
-            log.exception(e, request=self.request)
-            raise exc.HTTPInternalServerError(str(e))
-
-        content = utils.escape_entities(content)
-
-        html = u'<form id="xmltool-form" class="no-tree" data-action="%s" method="POST">' % (
-            self.request.custom_route_path('update_text_json'),
-        )
-        html += u'<input type="hidden" id="_xml_filename" name="filename" value="%s" />' % filename
-        html += u'<textarea class="codemirror" name="filecontent">%s</textarea>' % content
-        html += u'</form>'
-
-        dic = {
-            'content': html,
-        }
-        # TODO: Support to display message in angular or change this logic
-        if exception:
-            dic['error_msg'] = str(exception)
-        return dic
 
     @view_config(route_name='get_tags_json')
     def get_tags(self):
@@ -195,29 +145,25 @@ class EditorView(BaseUserView):
                 log.exception(e, request=self.request)
                 raise exc.HTTPInternalServerError(str(e))
 
-        if obj:
-            obj.root.html_renderer = self._get_html_renderer()
-            html = xmltool.generate_form_from_obj(
-                obj,
-                form_attrs={
-                    'data-add-href': self.request.custom_route_path('add_element_json'),
-                    'data-comment-href': self.request.custom_route_path('get_comment_modal_json'),
-                    'data-action': self.request.custom_route_path('update_json'),
-                    'data-copy-href': self.request.custom_route_path('copy_json'),
-                    'data-paste-href': self.request.custom_route_path('paste_json'),
-                }
-            )
-            jstree_data = obj.to_jstree_dict()
-            return {
-                'content': html,
-                'jstree_data': jstree_data,
-            }
+        if not obj:
+            raise exc.HTTPInternalServerError("Can't create new XML")
 
-        content = render('blocks/new.mak',
-                         {'dtd_urls': self.request.dtd_urls,
-                          'tags': _get_tags(self.request.dtd_urls[0])},
-                         self.request)
-        return {'modal': content}
+        obj.root.html_renderer = self._get_html_renderer()
+        html = xmltool.generate_form_from_obj(
+            obj,
+            form_attrs={
+                'data-add-href': self.request.custom_route_path('add_element_json'),
+                'data-comment-href': self.request.custom_route_path('get_comment_modal_json'),
+                'data-action': self.request.custom_route_path('update_json'),
+                'data-copy-href': self.request.custom_route_path('copy_json'),
+                'data-paste-href': self.request.custom_route_path('paste_json'),
+            }
+        )
+        jstree_data = obj.to_jstree_dict()
+        return {
+            'content': html,
+            'jstree_data': jstree_data,
+        }
 
     @view_config(route_name='update_json')
     def update(self):
@@ -251,35 +197,6 @@ class EditorView(BaseUserView):
                        view=self,
                        path=filename)
         return 'File updated'
-
-    @view_config(route_name='update_text_json')
-    def update_text(self):
-        filecontent = self.req_post.get('filecontent')
-        filename = self.req_post.get('filename') or ''
-        if not filecontent or not filename:
-            raise exc.HTTPClientError('Missing parameters!')
-        root_path = self.root_path
-        absfilename = browser.absolute_path(filename, root_path)
-        try:
-            obj = xmltool.load_string(filecontent)
-            obj.write(absfilename, transform=self.request.xmltool_transform())
-        except Exception, e:
-            raise exc.HTTPInternalServerError(str(e))
-
-        # TODO: the modal logic should be in angular
-        modal = None
-        msg = 'File updated'
-        if self.request.POST.get('commit'):
-            modal = render('blocks/commit_modal.mak',
-                           {}, self.request)
-
-        events.trigger('updated', view=self, paths=filename)
-        if modal:
-            return {
-                'modal': modal
-            }
-
-        return msg
 
     @view_config(route_name='add_element_json')
     def add_element_json(self):
@@ -350,7 +267,7 @@ class EditorView(BaseUserView):
     def get_comment_modal_json(self):
         # TODO: remove this function, it should be done in angular
         comment = self.request.GET.get('comment') or ''
-        content = render('blocks/comment_modal.mak',
+        content = render('comment_modal.mak',
                          {'comment': comment}, self.request)
         return {'content': content}
 
@@ -389,16 +306,16 @@ def includeme(config):
     if cache_timeout:
         xmltool.cache.CACHE_TIMEOUT = cache_timeout
 
+    settings['mako.directories'] += '\nwaxe.xml:templates'
+
     config.set_request_property(get_dtd_urls, 'dtd_urls', reify=True)
     config.set_request_property(get_xml_plugins, 'xml_plugins', reify=True)
     config.set_request_property(get_xmltool_transform, 'xmltool_transform',
                                 reify=True)
 
     config.add_route('edit_json', '/edit.json')
-    config.add_route('edit_text_json', '/edit-text.json')
     config.add_route('new_json', '/new.json')
     config.add_route('update_json', '/update.json')
-    config.add_route('update_text_json', '/update-text.json')
     config.add_route('add_element_json', '/add-element.json')
     config.add_route('get_comment_modal_json', '/get-comment-modal.json')
     config.add_route('copy_json', '/copy.json')

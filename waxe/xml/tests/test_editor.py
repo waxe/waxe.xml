@@ -18,6 +18,10 @@ from waxe.xml.views.editor import (
 
 
 def fake_renderer_func(login):
+    return None
+
+
+def fake_renderer_func_ckeditor(login):
     return xmltool.render.CKeditorRender()
 
 
@@ -68,9 +72,10 @@ class TestEditorView(LoggedBobTestCase):
     def test__get_html_renderer(self):
         request = testing.DummyRequest()
         res = EditorView(request)._get_html_renderer()
-        self.assertEqual(res, None)
+        self.assertTrue(isinstance(res, xmltool.render.ContenteditableRender))
         settings = request.registry.settings
-        func_str = '%s.fake_renderer_func' % fake_renderer_func.__module__
+        func_str = '%s.fake_renderer_func_ckeditor' % (
+            fake_renderer_func_ckeditor.__module__)
         settings['waxe.xml.xmltool.renderer_func'] = func_str
         res = EditorView(request)._get_html_renderer()
         self.assertTrue(isinstance(res, xmltool.render.CKeditorRender))
@@ -163,58 +168,11 @@ class TestEditorView(LoggedBobTestCase):
             request.matched_route = C()
             request.matched_route.name = 'route'
             request.custom_route_path = lambda *args, **kw: '/%s/filepath' % args[0]
-            res = EditorView(request).edit()
-            self.assertTrue(len(res), 3)
-            expected = (
-                '<form id="xmltool-form" class="no-tree" '
-                'data-action="/update_text_json/filepath" method="POST">')
-            self.assertTrue(expected in res['content'])
-            self.assertEqual(res['error_msg'], 'Invalid XML')
-
-    def test_edit_iframe(self):
-        class C(object): pass
-        path = os.path.join(os.getcwd(), 'waxe/xml/tests/files')
-        self.user_bob.config.root_path = path
-        request = testing.DummyRequest(
-            params={'path': 'file1.xml', 'iframe': 1})
-        request.matched_route = C()
-        request.css_resources = []
-        request.js_resources = []
-        request.str_resources = []
-        request.matched_route.name = 'route'
-        request.static_url = lambda *args, **kw: 'URL'
-        with patch('xmltool.generate_form', return_value='My form content'):
-            res = EditorView(request).edit()
-            self.assertTrue('<form id="xmltool-form">' in res.body)
-            self.assertTrue('readonly="readonly"' in res.body)
-
-    def test_edit_text(self):
-        class C(object): pass
-        path = os.path.join(os.getcwd(), 'waxe/xml/tests/files')
-        self.user_bob.config.root_path = path
-        request = testing.DummyRequest()
-        request.matched_route = C()
-        request.matched_route.name = 'route'
-        try:
-            EditorView(request).edit_text()
-            assert(False)
-        except exc.HTTPClientError, e:
-            expected = 'No filename given'
-            self.assertEqual(str(e), expected)
-
-        request = testing.DummyRequest(params={'path': 'file1.xml'})
-        request.matched_route = C()
-        request.matched_route.name = 'route'
-        request.custom_route_path = lambda *args, **kw: '/%s/filepath' % args[0]
-        res = EditorView(request).edit_text()
-        expected = ('<form id="xmltool-form" class="no-tree" '
-                    'data-action="/update_text_json/filepath" method="POST">')
-        self.assertTrue(expected in res['content'])
-        expected = '<textarea class="codemirror" name="filecontent">'
-        self.assertTrue(expected in res['content'])
-        expected = ('<input type="hidden" id="_xml_filename" '
-                    'name="filename" value="file1.xml" />')
-        self.assertTrue(expected in res['content'])
+            try:
+                res = EditorView(request).edit()
+                assert(False)
+            except Exception, e:
+                self.assertEqual(str(e), 'Invalid XML')
 
     def test_get_tags(self):
         request = testing.DummyRequest()
@@ -240,10 +198,12 @@ class TestEditorView(LoggedBobTestCase):
         request.matched_route = C()
         request.matched_route.name = 'route_json'
         request.dtd_urls = [dtd_url]
-        res = EditorView(request).new()
-        self.assertEqual(len(res), 1)
-        self.assertTrue(
-            '<h4 class="modal-title">New file</h4>' in res['modal'])
+        # Missing parameters
+        try:
+            res = EditorView(request).new()
+            assert(False)
+        except Exception, e:
+            self.assertEqual(str(e), "Can't create new XML")
 
         request = testing.DummyRequest(
             params={
@@ -340,55 +300,6 @@ class TestEditorView(LoggedBobTestCase):
                 assert(False)
             except exc.HTTPInternalServerError, e:
                 self.assertEqual(str(e), expected)
-
-    def test_update_text(self):
-        path = os.path.join(os.getcwd(), 'waxe/xml/tests/files')
-        self.user_bob.config.root_path = path
-        request = testing.DummyRequest(params={})
-        try:
-            EditorView(request).update_text()
-            assert(False)
-        except exc.HTTPClientError, e:
-            expected = 'Missing parameters!'
-            self.assertEqual(str(e), expected)
-
-        request = testing.DummyRequest(
-            params={'filecontent': 'content of the file',
-                    'filename': 'thefilename.xml'})
-        request.custom_route_path = lambda *args, **kw: '/filepath'
-
-        def raise_func(*args, **kw):
-            raise Exception('My error')
-
-        with patch('xmltool.load_string') as m:
-            m.side_effect = raise_func
-            try:
-                EditorView(request).update_text()
-                assert(False)
-            except exc.HTTPInternalServerError, e:
-                expected = 'My error'
-                self.assertEqual(str(e),  expected)
-
-        filecontent = open(os.path.join(path, 'file1.xml'), 'r').read()
-        # The dtd should be an absolute url!
-        filecontent = filecontent.replace('exercise.dtd',
-                                          os.path.join(path, 'exercise.dtd'))
-        request = testing.DummyRequest(
-            params={'filecontent': filecontent,
-                    'filename': 'thefilename.xml'})
-        request.custom_route_path = lambda *args, **kw: '/filepath'
-        request.xmltool_transform = lambda: (lambda s: s)
-
-        with patch('xmltool.elements.Element.write', return_value=None):
-            res = EditorView(request).update_text()
-            expected_msg = 'File updated'
-            self.assertEqual(res,  expected_msg)
-
-            request.params['commit'] = True
-            res = EditorView(request).update_text()
-            self.assertEqual(len(res), 1)
-            self.assertTrue('class="modal' in res['modal'])
-            self.assertTrue('Commit message' in res['modal'])
 
     def test_add_element_json(self):
         path = os.path.join(os.getcwd(), 'waxe/xml/tests/files')
@@ -494,7 +405,6 @@ class FunctionalTestEditorView(WaxeTestCase):
             '/api/1/account/Bob/xml/get-tags.json',
             '/api/1/account/Bob/xml/new.json',
             '/api/1/account/Bob/xml/update.json',
-            '/api/1/account/Bob/xml/update-text.json',
             '/api/1/account/Bob/xml/add-element.json',
             '/api/1/account/Bob/xml/get-comment-modal.json',
             '/api/1/account/Bob/xml/copy.json',
@@ -526,7 +436,7 @@ class FunctionalTestEditorView(WaxeTestCase):
         self.assertTrue(isinstance(dic['jstree_data'], dict))
 
         self.assertEqual(dic['content'].count('<textarea'), 17)
-        self.assertEqual(dic['content'].count('contenteditable="true"'), 0)
+        self.assertEqual(dic['content'].count('contenteditable="true"'), 17)
 
         settings = self.testapp.app.app.registry.settings
         func_str = '%s.fake_renderer_func' % fake_renderer_func.__module__
@@ -537,30 +447,7 @@ class FunctionalTestEditorView(WaxeTestCase):
                                params={'path': 'file1.xml'})
         dic = json.loads(res.body)
         self.assertEqual(dic['content'].count('<textarea'), 17)
-        self.assertEqual(dic['content'].count('contenteditable="true"'), 17)
-
-    @login_user('Bob')
-    def test_edit_text(self):
-        path = os.path.join(os.getcwd(), 'waxe/xml/tests/files')
-        self.user_bob.config.root_path = path
-        res = self.testapp.get('/api/1/account/Bob/xml/edit-text.json', status=400)
-        self.assertEqual(res.body,  '"No filename given"')
-
-        res = self.testapp.get('/api/1/account/Bob/xml/edit-text.json',
-                               status=200,
-                               params={'path': 'file1.xml'})
-        dic = json.loads(res.body)
-        self.assertEqual(len(dic), 1)
-
-        expected = ('<form id="xmltool-form" class="no-tree" '
-                    'data-action="/api/1/account/Bob/xml/update-text.json" '
-                    'method="POST">')
-        self.assertTrue(expected in dic['content'])
-        expected = '<textarea class="codemirror" name="filecontent">'
-        self.assertTrue(expected in dic['content'])
-        expected = ('<input type="hidden" id="_xml_filename" '
-                    'name="filename" value="file1.xml" />')
-        self.assertTrue(expected in dic['content'])
+        self.assertEqual(dic['content'].count('contenteditable="true"'), 0)
 
     @login_user('Bob')
     def test_get_tags(self):
@@ -580,17 +467,14 @@ class FunctionalTestEditorView(WaxeTestCase):
     def test_new(self):
         path = os.path.join(os.getcwd(), 'waxe/xml/tests/files')
         self.user_bob.config.root_path = path
-        res = self.testapp.get('/api/1/account/Bob/xml/new.json', status=200)
+        res = self.testapp.get('/api/1/account/Bob/xml/new.json', status=500)
         self.assertTrue(('Content-Type', 'application/json; charset=UTF-8') in
                         res._headerlist)
-        dic = json.loads(res.body)
-        self.assertEqual(len(dic), 1)
-        self.assertTrue(
-            '<h4 class="modal-title">New file</h4>' in dic['modal'])
+        content = json.loads(res.body)
+        self.assertEqual(content, "Can't create new XML")
 
         dtd_url = os.path.join(path, 'exercise.dtd')
         dtd_tag = 'Exercise'
-        # TODO: it should be a get
         res = self.testapp.get(
             '/api/1/account/Bob/xml/new.json',
             status=200,
@@ -622,14 +506,6 @@ class FunctionalTestEditorView(WaxeTestCase):
                                     status=200,
                                     params={'_xml_filename': 'test.xml'})
             self.assertEqual(res.body, '"File updated"')
-
-    @login_user('Bob')
-    def test_update_text(self):
-        path = os.path.join(os.getcwd(), 'waxe/xml/tests/files')
-        self.user_bob.config.root_path = path
-        res = self.testapp.post('/api/1/account/Bob/xml/update-text.json',
-                                status=400)
-        self.assertEqual(res.body, '"Missing parameters!"')
 
     @login_user('Bob')
     def test_add_element_json(self):
