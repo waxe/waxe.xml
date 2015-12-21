@@ -58,7 +58,7 @@ def add_element(request, str_id, dtd_url):
 
 def is_valid_filecontent(view, path, filecontent):
     if not os.path.splitext(path)[1] == '.xml':
-        return filecontent
+        return view, path, filecontent
 
     try:
         xmltool.load_string(filecontent)
