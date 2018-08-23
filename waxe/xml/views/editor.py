@@ -1,7 +1,7 @@
 import os
 import tempfile
 import xmltool
-from xmltool import dtd_parser, render as xt_render
+from xmltool import dtd, render as xt_render
 from lxml import etree
 import json
 import importlib
@@ -23,7 +23,7 @@ ROUTE_PREFIX = waxe.xml.ROUTE_PREFIX
 
 
 def _get_tags(dtd_url, text=False):
-    dic = xmltool.dtd_parser.parse(dtd_url=dtd_url)
+    dic = dtd.DTD(url=dtd_url).parse()
     lis = []
     texts = []
     for k, v in dic.items():
@@ -135,7 +135,7 @@ class EditorView(BaseUserView):
         if dtd_tag and dtd_url:
             # Create new object from the dtd url and tag
             try:
-                dic = dtd_parser.parse(dtd_url=dtd_url)
+                dic = dtd.DTD(url=dtd_url).parse()
             except (HTTPError, URLError), e:
                 log.exception(e, request=self.request)
                 raise exc.HTTPInternalServerError(
